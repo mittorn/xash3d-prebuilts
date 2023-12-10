@@ -1,0 +1,189 @@
+diff --git a/gdb-12.1_orig/bfd/plugin.c b/gdb-12.1/bfd/plugin.c
+index fb45cbe..503379e 100644
+--- a/gdb-12.1_orig/bfd/plugin.c
++++ b/gdb-12.1/bfd/plugin.c
+@@ -351,7 +351,7 @@ try_load_plugin (const char *pname,
+   if (plugin_list_iter)
+     pname = plugin_list_iter->plugin_name;
+ 
+-  plugin_handle = dlopen (pname, RTLD_NOW);
++  plugin_handle = 0; //dlopen (pname, RTLD_NOW);
+   if (!plugin_handle)
+     {
+       /* If we are building a list of viable plugins, then
+diff --git a/gdb-12.1_orig/gdb/configure b/gdb-12.1/gdb/configure
+index b34baff..0d51a44 100755
+--- a/gdb-12.1_orig/gdb/configure
++++ b/gdb-12.1/gdb/configure
+@@ -6723,7 +6723,7 @@ gdb_host_obs=posix-hdep.o
+ if test "${target}" = "${host}"; then
+   gdb_native=yes
+ else
+-  gdb_native=no
++  gdb_native=yes
+ fi
+ 
+ . $srcdir/configure.host
+diff --git a/gdb-12.1_orig/gdb/configure.ac b/gdb-12.1/gdb/configure.ac
+index bc8925d..3602eaf 100644
+--- a/gdb-12.1_orig/gdb/configure.ac
++++ b/gdb-12.1/gdb/configure.ac
+@@ -174,7 +174,7 @@ gdb_host_obs=posix-hdep.o
+ if test "${target}" = "${host}"; then
+   gdb_native=yes
+ else
+-  gdb_native=no
++  gdb_native=yes
+ fi
+ 
+ . $srcdir/configure.host
+diff --git a/gdb-12.1_orig/gdb/defs.h b/gdb-12.1/gdb/defs.h
+index 3fddbe2..fa00145 100644
+--- a/gdb-12.1_orig/gdb/defs.h
++++ b/gdb-12.1/gdb/defs.h
+@@ -609,7 +609,7 @@ extern int (*deprecated_ui_load_progress_hook) (const char *section,
+ /* If this definition isn't overridden by the header files, assume
+    that isatty and fileno exist on this system.  */
+ #ifndef ISATTY
+-#define ISATTY(FP)	(isatty (fileno (FP)))
++#define ISATTY(FP)	(isatty (fileno (FP)) || (getenv("FAKE_TTY") && fileno (FP) < 3))
+ #endif
+ 
+ /* * A width that can achieve a better legibility for GDB MI mode.  */
+diff --git a/gdb-12.1_orig/gdb/linux-thread-db.c b/gdb-12.1/gdb/linux-thread-db.c
+index 530ece0..6f8cf60 100644
+--- a/gdb-12.1_orig/gdb/linux-thread-db.c
++++ b/gdb-12.1/gdb/linux-thread-db.c
+@@ -990,7 +990,7 @@ try_thread_db_load (const char *library, bool check_auto_load_safe)
+ 	return false;
+     }
+ 
+-  handle = dlopen (library, RTLD_NOW);
++  handle = NULL; //dlopen (library, RTLD_NOW);
+   if (handle == NULL)
+     {
+       if (libthread_db_debug)
+diff --git a/gdb-12.1_orig/gdb/nat/linux-namespaces.c b/gdb-12.1/gdb/nat/linux-namespaces.c
+index 94b247c..befaa28 100644
+--- a/gdb-12.1_orig/gdb/nat/linux-namespaces.c
++++ b/gdb-12.1/gdb/nat/linux-namespaces.c
+@@ -954,6 +954,7 @@ int
+ linux_mntns_open_cloexec (pid_t pid, const char *filename,
+ 			  int flags, mode_t mode)
+ {
++#if 0
+   enum mnsh_fs_code access = linux_mntns_access_fs (pid);
+   struct linux_mnsh *helper;
+   int fd, error;
+@@ -980,6 +981,9 @@ linux_mntns_open_cloexec (pid_t pid, const char *filename,
+     errno = error;
+ 
+   return fd;
++#else
++    return gdb_open_cloexec (filename, flags, mode).release ();
++#endif
+ }
+ 
+ /* See nat/linux-namespaces.h.  */
+@@ -987,6 +991,7 @@ linux_mntns_open_cloexec (pid_t pid, const char *filename,
+ int
+ linux_mntns_unlink (pid_t pid, const char *filename)
+ {
++#if 0
+   enum mnsh_fs_code access = linux_mntns_access_fs (pid);
+   struct linux_mnsh *helper;
+   int ret, error;
+@@ -1013,6 +1018,9 @@ linux_mntns_unlink (pid_t pid, const char *filename)
+     errno = error;
+ 
+   return ret;
++#else
++    return unlink (filename);
++#endif
+ }
+ 
+ /* See nat/linux-namespaces.h.  */
+@@ -1021,6 +1029,7 @@ ssize_t
+ linux_mntns_readlink (pid_t pid, const char *filename,
+ 		      char *buf, size_t bufsiz)
+ {
++#if 0
+   enum mnsh_fs_code access = linux_mntns_access_fs (pid);
+   struct linux_mnsh *helper;
+   int ret, error;
+@@ -1051,4 +1060,7 @@ linux_mntns_readlink (pid_t pid, const char *filename,
+     gdb_assert (size == ret);
+ 
+   return ret;
++#else
++    return readlink (filename, buf, bufsiz);
++#endif
+ }
+diff --git a/gdb-12.1_orig/gdb/nat/linux-osdata.c b/gdb-12.1/gdb/nat/linux-osdata.c
+index 3c31ee6..bafe689 100644
+--- a/gdb-12.1_orig/gdb/nat/linux-osdata.c
++++ b/gdb-12.1/gdb/nat/linux-osdata.c
+@@ -205,10 +205,10 @@ commandline_from_pid (PID_T pid)
+ static void
+ user_from_uid (char *user, int maxlen, uid_t uid)
+ {
+-  struct passwd *pwentry;
++  struct passwd *pwentry = NULL;
+   char buf[1024];
+   struct passwd pwd;
+-  getpwuid_r (uid, &pwd, buf, sizeof (buf), &pwentry);
++  //getpwuid_r (uid, &pwd, buf, sizeof (buf), &pwentry);
+ 
+   if (pwentry)
+     {
+diff --git a/gdb-12.1_orig/gdb/ui-file.c b/gdb-12.1/gdb/ui-file.c
+index d30ec04..434b684 100644
+--- a/gdb-12.1_orig/gdb/ui-file.c
++++ b/gdb-12.1/gdb/ui-file.c
+@@ -316,7 +316,7 @@ stdio_file::puts (const char *linebuffer)
+ bool
+ stdio_file::isatty ()
+ {
+-  return ::isatty (m_fd);
++  return m_fd < 3;//::isatty (m_fd) || (getenv("FAKE_TTY") && m_fd < 3);
+ }
+ 
+ /* See ui-file.h.  */
+diff --git a/gdb-12.1_orig/gdb/ui-file.h b/gdb-12.1/gdb/ui-file.h
+index d8bc3fb..8bdad83 100644
+--- a/gdb-12.1_orig/gdb/ui-file.h
++++ b/gdb-12.1/gdb/ui-file.h
+@@ -78,7 +78,7 @@ public:
+   { gdb_assert_not_reached ("can't read from this file type"); }
+ 
+   virtual bool isatty ()
+-  { return false; }
++  { return true; }
+ 
+   /* true indicates terminal output behaviour such as cli_styling.
+      This default implementation indicates to do terminal output
+diff --git a/gdb-12.1_orig/gdbsupport/gdb-dlfcn.cc b/gdb-12.1/gdbsupport/gdb-dlfcn.cc
+index 758eace..23698aa 100644
+--- a/gdb-12.1_orig/gdbsupport/gdb-dlfcn.cc
++++ b/gdb-12.1/gdbsupport/gdb-dlfcn.cc
+@@ -28,6 +28,7 @@
+ /* Unsupported configuration. */
+ #define NO_SHARED_LIB
+ #endif
++#define NO_SHARED_LIB
+ 
+ #ifdef NO_SHARED_LIB
+ 
+diff --git a/gdb-12.1_orig/readline/readline/input.c b/gdb-12.1/readline/readline/input.c
+index 61b0fde..7925875 100644
+--- a/gdb-12.1_orig/readline/readline/input.c
++++ b/gdb-12.1/readline/readline/input.c
+@@ -541,7 +541,7 @@ rl_getc (FILE *stream)
+ 	return (_getch ());	/* "There is no error return." */
+ #endif
+       result = 0;
+-#if defined (HAVE_PSELECT)
++#if 0 // defined (HAVE_PSELECT)
+       FD_ZERO (&readfds);
+       FD_SET (fileno (stream), &readfds);
+ #  if defined (HANDLE_SIGNALS)
